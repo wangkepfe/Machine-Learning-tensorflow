@@ -193,7 +193,7 @@ seq_max_len = 31 # Sequence max length
 n_hidden = 31 #todo?? hidden layer num of features
 n_classes = 1 # linear sequence or not
 
-state_size = 20
+state_size = 1#20
 
 trainset = ToySequenceData(n_samples=len(tweetList_encoded), max_seq_len=seq_max_len)
 testset = ToySequenceData(n_samples=len(tweetList_encoded), max_seq_len=seq_max_len)#todo
@@ -205,8 +205,8 @@ y = tf.placeholder("float", [None, n_classes])
 seqlen = tf.placeholder(tf.int32, [None])
 
 # Embedding layer
-embeddings = tf.get_variable('embedding_matrix', [seq_max_len, state_size])
-rnn_inputs = tf.nn.embedding_lookup(embeddings, x)
+#embeddings = tf.get_variable('embedding_matrix', [seq_max_len, state_size])
+#rnn_inputs = tf.nn.embedding_lookup(embeddings, x)
 
 
 # Define weights
