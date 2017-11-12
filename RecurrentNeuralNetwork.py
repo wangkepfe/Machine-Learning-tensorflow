@@ -1,3 +1,4 @@
+# need comments!
 import csv
 with open('train.csv', "rt", encoding='utf-8', errors='ignore') as csvfile:
     twtreader = csv.reader(csvfile)
