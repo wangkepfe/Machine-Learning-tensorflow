@@ -11,7 +11,7 @@ with open('train.csv', "rt", encoding='utf-8', errors='ignore') as csvfile:
     for i in range(0, len(trainlistoriginal)):
         traintar[i] = trainlistoriginal[i][0]
         trainlist[i] = trainlistoriginal[i][1]
-
+    #eliminate retweets
     str = "http"
     for i in range(0, len(trainlist)):
         strcount = trainlist[i].count(str)
@@ -20,35 +20,39 @@ with open('train.csv', "rt", encoding='utf-8', errors='ignore') as csvfile:
                 mystr = trainlist[i]
                 ind = mystr.index(str, 0)
                 trainlist[i] = trainlist[i][0:ind-1] + trainlist[i][ind + 23-1: -1]
-
+    #classify training target
     trainumtar = [[0 for i in range(2)] for i in range(len(traintar))]
     for i in range(0, len(traintar)):
         if traintar[i] == "HillaryClinton":
             trainumtar[i][0] = 1
         else:
             trainumtar[i][1] = 1
-
+# words tokenize
 from nltk.tokenize import RegexpTokenizer
 tokenizer = RegexpTokenizer(r'\w+')
-trainlistallwords = set()
 for i in range(0, len(trainlist)):
     trainlist[i] = tokenizer.tokenize(trainlist[i])
-    trainlistallwords.update(trainlist[i])
 
+# find sentenses' max length
 maxlen = 0
 for tweet in trainlist:
     if len(tweet) > maxlen:
         maxlen = len(tweet)
 
+trainlistallwords = set()
+for i in range(0, len(trainlist)):
+    trainlistallwords.update(trainlist[i])
+
 trainlistallwords = list(trainlistallwords)
 N = len(trainlistallwords)
-
+#make a dictionary
 dict = {}
 wordnum = 0
 for word in trainlistallwords:
     dict[word] = wordnum
     wordnum += 1
 
+# change the words batch to number batch
 def getbatchlabel(index):
     batch_label = [0] * maxlen
     for i in range(len(trainlist[index])):
@@ -85,6 +89,7 @@ with open('test.csv', "rt", encoding='utf-8', errors='ignore') as csvfile:
     for i in range(0, len(testlist)):
         testlist[i] = tokenizer.tokenize(testlist[i])
 
+def gettestdata(testlist):
     testlist_processed = []
     for i in range(len(testlist)):
         new_test_list = []
@@ -93,19 +98,17 @@ with open('test.csv', "rt", encoding='utf-8', errors='ignore') as csvfile:
                 new_test_list.append(testlist[i][j])
         testlist_processed.append(new_test_list)
 
-def gettestlabel(index):
-    test_label = [0] * maxlen
-    for i in range(min(len(testlist_processed[index]), maxlen)):
-        test_label[i] = dict[testlist_processed[index][i]]
-    return test_label
+    test_data = []
+    for i in range(len(testlist_processed)):
+        test_label = [0] * maxlen
+        for j in range(min(len(testlist_processed[i]), maxlen)):
+            test_label[j] = dict[testlist_processed[i][j]]
+        test_data.append(test_label)
 
-testdata = []
-for i in range(len(testlist)):
-    testdata.append(gettestlabel(i))
-
-test_len = []
-for i in range(len(testlist)):
-    test_len.append(min(len(testlist_processed[i]), maxlen))
+    test_len = []
+    for i in range(len(testlist)):
+        test_len.append(min(len(testlist_processed[i]), maxlen))
+    return test_data, test_len
 
 # get train data
 def gettrainbatch(batchi, batch_size):
@@ -133,8 +136,6 @@ embedding_size = 20
 lstm_size = 20
 senten_words_num = maxlen
 class_num = 2
-#batch_size = 128
-# batch_num = len(trainlist)
 
 X = tf.placeholder(tf.int32, [None, maxlen])
 Y = tf.placeholder(tf.float32, [None, 2])
@@ -151,7 +152,7 @@ lstm_cells = tf.contrib.rnn.BasicLSTMCell(num_units=lstm_size)
 outputs, state = tf.nn.dynamic_rnn(cell=lstm_cells, inputs=inputs, dtype=tf.float32, sequence_length=sentense_length)
 last_output_idx = tf.range(tf.shape(outputs)[0]) * tf.shape(outputs)[1] + sentense_length - 1
 last_rnn_output = tf.gather(tf.reshape(outputs, [-1, lstm_size]), last_output_idx)
-one_batch_predict = tf.nn.sigmoid(tf.matmul(last_rnn_output, weights) + bias)
+one_batch_predict = tf.nn.softmax(tf.matmul(last_rnn_output, weights) + bias)
 
 cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=one_batch_predict, labels=Y))
 
@@ -176,15 +177,19 @@ with tf.Session() as sess:
 
     saver.save(sess, "Model/model.ckpt")
     saver.restore(sess, "./Model/model.ckpt")
+#Validation part
     # val_x = []
     # val_y = []
     # val_len = []
     # for i in range((train_batch_num - 5) * batch_size, len(trainlist)):
-    #     val_x.append(traindata[i])
+    #     val_x.append(trainlist[i])
     #     val_y.append(trainumtar[i])
-    #     val_len.append(len(trainlist[i]))
+    # val_x, val_len = gettestdata(val_x)
     # val_acc, val_loss = sess.run([accuracy, cross_entropy_loss], feed_dict={X: val_x, Y: val_y, sentense_length: val_len})
     # print('val_acc:%f, val_loss:%f' % (val_acc, val_loss))
+
+#test part
+    testdata, test_len = gettestdata(testlist)
     test_result = sess.run(one_batch_predict, feed_dict={X: testdata, sentense_length: test_len})
 
 csvFile = open("test_result.csv", "w")
