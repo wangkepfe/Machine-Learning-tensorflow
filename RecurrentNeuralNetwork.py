@@ -113,17 +113,12 @@ def gettrainbatch(batchi, batch_size):
     batch_y = []
     batch_len = []
     if (batchi + 1) * batch_size > len(traindata):
-        out_length = (batchi + 1) * batch_size - len(traindata)
-        for i in range(batchi * batch_size, len(traindata)):
-            batch_x.append(traindata[i])
-            batch_y.append(trainumtar[i])
-        for i in range(batchi * batch_size, len(traindata)):
-            batch_len.append(len(trainlist[i]))
+        out_length = len(traindata) - batchi * batch_size
         for i in range(out_length):
-            batch_x.append(traindata[i])
-            batch_y.append(trainumtar[i])
+            batch_x.append(traindata[batchi * batch_size + i])
+            batch_y.append(trainumtar[batchi * batch_size + i])
         for i in range(out_length):
-            batch_len.append(len(trainlist[i]))
+            batch_len.append(len(trainlist[batchi * batch_size + i]))
     else:
         for i in range(batch_size):
             batch_x.append(traindata[batchi * batch_size + i])
