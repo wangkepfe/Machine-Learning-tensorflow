@@ -149,6 +149,7 @@ import numpy as np
 embeddings = tf.Variable(tf.random_uniform([vocalbulary_size, embedding_size], -1.0, 1.0))
 inputs = tf.nn.embedding_lookup(embeddings, X)
 def forwardNN(last_rnn_output):
+    # 2 hidden layers added
     lay_1_num = 50
     lay_2_num = 100
     weights_1 = tf.Variable(tf.truncated_normal([embedding_size, lay_1_num], stddev=np.sqrt(2.0/lay_1_num), dtype=tf.float32))
@@ -160,20 +161,28 @@ def forwardNN(last_rnn_output):
     out_weights = tf.Variable(tf.truncated_normal([lay_2_num, class_num], stddev=np.sqrt(2.0/class_num), dtype=tf.float32))
     out_bias = tf.Variable(tf.constant(0.0, shape=[class_num], dtype=tf.float32))
     out_result = tf.matmul(result_2, out_weights) + out_bias
+ 
+    # l2 loss regularizer
+    
     l2_loss = tf.nn.l2_loss(weights_1) + tf.nn.l2_loss(out_weights) + tf.nn.l2_loss(weights_2)
     return out_result, l2_loss
 
 lstm_cells = tf.contrib.rnn.BasicLSTMCell(num_units=lstm_size)
 outputs, state = tf.nn.dynamic_rnn(cell=lstm_cells, inputs=inputs, dtype=tf.float32, sequence_length=sentense_length)
+# add drop out! no overfitting
 outputs = tf.nn.dropout(outputs, keep_prob=0.6)
 last_output_idx = tf.range(tf.shape(outputs)[0]) * tf.shape(outputs)[1] + sentense_length - 1
 last_rnn_output = tf.gather(tf.reshape(outputs, [-1, lstm_size]), last_output_idx)
 
 # one_batch_predict = tf.nn.softmax(tf.matmul(last_rnn_output, weights) + bias)
 one_batch_predict = forwardNN(last_rnn_output)[0]
+
+# important! first sigmoid, then softmax!
 classify = tf.nn.sigmoid(one_batch_predict)
 probability = tf.nn.softmax(classify)
 l2_loss = forwardNN(last_rnn_output)[1]
+
+# add regularizer
 cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=one_batch_predict, labels=Y)) + 0.001 * l2_loss
 
 train_method = tf.train.GradientDescentOptimizer(0.1).minimize(cross_entropy_loss)
