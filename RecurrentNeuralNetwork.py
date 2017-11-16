@@ -132,31 +132,51 @@ def gettrainbatch(batchi, batch_size):
 
 import tensorflow as tf
 vocalbulary_size = len(trainlistallwords)
-embedding_size = 20
-lstm_size = 20
+embedding_size = 25
+lstm_size = 25
 senten_words_num = maxlen
 class_num = 2
 
 X = tf.placeholder(tf.int32, [None, maxlen])
 Y = tf.placeholder(tf.float32, [None, 2])
 sentense_length = tf.placeholder(tf.int32, [None])
+keep_prob = tf.constant(1.0)
 
-
-weights = tf.Variable(tf.truncated_normal([embedding_size, class_num], stddev=1, dtype=tf.float32))
-bias = tf.Variable(tf.constant(0.0, shape=[class_num], dtype=tf.float32))
+import numpy as np
+# weights = tf.Variable(tf.truncated_normal([embedding_size, class_num], stddev=1, dtype=tf.float32))
+# bias = tf.Variable(tf.constant(0.0, shape=[class_num], dtype=tf.float32))
 
 embeddings = tf.Variable(tf.random_uniform([vocalbulary_size, embedding_size], -1.0, 1.0))
 inputs = tf.nn.embedding_lookup(embeddings, X)
+def forwardNN(last_rnn_output):
+    lay_1_num = 50
+    lay_2_num = 100
+    weights_1 = tf.Variable(tf.truncated_normal([embedding_size, lay_1_num], stddev=np.sqrt(2.0/lay_1_num), dtype=tf.float32))
+    bias_1 = tf.Variable(tf.constant(0.0, shape=[lay_1_num], dtype=tf.float32))
+    result_1 = tf.matmul(last_rnn_output, weights_1) + bias_1
+    weights_2 = tf.Variable(tf.truncated_normal([lay_1_num, lay_2_num], stddev=np.sqrt(2.0/lay_2_num), dtype=tf.float32))
+    bias_2 = tf.Variable(tf.constant(0.0, shape=[lay_2_num], dtype=tf.float32))
+    result_2 = tf.matmul(result_1, weights_2) + bias_2
+    out_weights = tf.Variable(tf.truncated_normal([lay_2_num, class_num], stddev=np.sqrt(2.0/class_num), dtype=tf.float32))
+    out_bias = tf.Variable(tf.constant(0.0, shape=[class_num], dtype=tf.float32))
+    out_result = tf.matmul(result_2, out_weights) + out_bias
+    l2_loss = tf.nn.l2_loss(weights_1) + tf.nn.l2_loss(out_weights) + tf.nn.l2_loss(weights_2)
+    return out_result, l2_loss
 
 lstm_cells = tf.contrib.rnn.BasicLSTMCell(num_units=lstm_size)
 outputs, state = tf.nn.dynamic_rnn(cell=lstm_cells, inputs=inputs, dtype=tf.float32, sequence_length=sentense_length)
+outputs = tf.nn.dropout(outputs, keep_prob=0.6)
 last_output_idx = tf.range(tf.shape(outputs)[0]) * tf.shape(outputs)[1] + sentense_length - 1
 last_rnn_output = tf.gather(tf.reshape(outputs, [-1, lstm_size]), last_output_idx)
-one_batch_predict = tf.nn.softmax(tf.matmul(last_rnn_output, weights) + bias)
 
-cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=one_batch_predict, labels=Y))
+# one_batch_predict = tf.nn.softmax(tf.matmul(last_rnn_output, weights) + bias)
+one_batch_predict = forwardNN(last_rnn_output)[0]
+classify = tf.nn.sigmoid(one_batch_predict)
+probability = tf.nn.softmax(classify)
+l2_loss = forwardNN(last_rnn_output)[1]
+cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=one_batch_predict, labels=Y)) + 0.001 * l2_loss
 
-train_method = tf.train.GradientDescentOptimizer(1).minimize(cross_entropy_loss)
+train_method = tf.train.GradientDescentOptimizer(0.1).minimize(cross_entropy_loss)
 
 accurate_position = tf.equal(tf.argmax(Y, 1), tf.argmax(one_batch_predict, 1))
 accuracy = tf.reduce_mean(tf.cast(accurate_position, tf.float32))
@@ -168,14 +188,23 @@ saver = tf.train.Saver(max_to_keep=1)
 with tf.Session() as sess:
     sess.run(init)
     import math
+    import random
     batch_size = 128
     train_batch_num = math.ceil(len(trainlist) / batch_size)
-    for i in range(10):
+    for i in range(1, 1001):
         for batchi in range(train_batch_num):
             batch_x, batch_y, batch_len = gettrainbatch(batchi, batch_size)
             sess.run(train_method, feed_dict={X: batch_x, Y: batch_y, sentense_length: batch_len})
-
+        if i % 100 == 0 or i == 1:
+            batch_x, batch_y, batch_len = gettrainbatch(random.randint(0, train_batch_num-1), batch_size)
+            acc, loss = sess.run([accuracy, cross_entropy_loss], feed_dict={X: batch_x, Y: batch_y,
+                                                                  sentense_length: batch_len})
+            print(acc, loss)
+    print("train over!")
     saver.save(sess, "Model/model.ckpt")
+
+with tf.Session() as sess:
+    sess.run(init)
     saver.restore(sess, "./Model/model.ckpt")
 #Validation part
     # val_x = []
@@ -190,18 +219,16 @@ with tf.Session() as sess:
 
 #test part
     testdata, test_len = gettestdata(testlist)
-    test_result = sess.run(one_batch_predict, feed_dict={X: testdata, sentense_length: test_len})
+    test_result = sess.run(probability, feed_dict={X: testdata, sentense_length: test_len})
 
-csvFile = open("test_result.csv", "w")
-writer = csv.writer(csvFile)
+    csvFile = open("test_result.csv", "w", newline='')
+    writer = csv.writer(csvFile)
 
-fileheader = ["id", "realDonaldTrump", "HillaryClinton"]
+    fileheader = ["id", "realDonaldTrump", "HillaryClinton"]
 
-writer.writerow(fileheader)
+    writer.writerow(fileheader)
 
-for i in range(len(test_result)):
+    for i in range(len(test_result)):
+        writer.writerow([i, test_result[i][1], test_result[i][0]])
 
-    onerow = [i, test_result[i][1], test_result[i][0]]
-    writer.writerow(onerow)
-
-csvFile.close()
+    csvFile.close()
