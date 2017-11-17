@@ -133,13 +133,13 @@ def gettrainbatch(batchi, batch_size):
 
 import tensorflow as tf
 vocalbulary_size = len(trainlistallwords)
-embedding_size = 30
-lstm_size = 30
+embedding_size = 25
+lstm_size = 25
 senten_words_num = maxlen
 class_num = 2
 learning_rate = 1
-iter_num = 500
-iter_display_step = 10
+iter_num = 2000
+iter_display_step = 20
 #nn
 nn1 = 30
 nn2 = 30
@@ -168,6 +168,8 @@ inputs = tf.nn.embedding_lookup(embeddings, X)
 #lstm
 lstm_cells = tf.contrib.rnn.BasicLSTMCell(num_units=lstm_size)
 outputs, state = tf.nn.dynamic_rnn(cell=lstm_cells, inputs=inputs, dtype=tf.float32, sequence_length=sentense_length)
+# add drop out! no overfitting
+outputs = tf.nn.dropout(outputs, keep_prob=0.6)
 last_output_idx = tf.range(tf.shape(outputs)[0]) * tf.shape(outputs)[1] + sentense_length - 1
 last_rnn_output = tf.gather(tf.reshape(outputs, [-1, lstm_size]), last_output_idx)
 
@@ -176,10 +178,13 @@ nn_layer_1 = tf.add(tf.matmul(last_rnn_output, weights['w1']), bias['b1'])
 nn_layer_2 = tf.add(tf.matmul(nn_layer_1, weights['w2']), bias['b2'])
 
 #sigmoid layer
-one_batch_predict = tf.nn.sigmoid(tf.matmul( last_rnn_output, weights['sigmoid']) + bias['sigmoid'])
+#one_batch_predict = tf.nn.sigmoid(tf.matmul( last_rnn_output, weights['sigmoid']) + bias['sigmoid'])
 
+#softmax layer
+#one_batch_predict=tf.nn.softmax_cross_entropy_with_logits(logits=nn_layer_2, labels=Y)
+one_batch_predict=tf.nn.softmax(logits=nn_layer_2)
 #loss
-cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=one_batch_predict, labels=Y))
+cross_entropy_loss = tf.reduce_mean(one_batch_predict)
 
 #backward
 train_method = tf.train.GradientDescentOptimizer(learning_rate).minimize(cross_entropy_loss)
