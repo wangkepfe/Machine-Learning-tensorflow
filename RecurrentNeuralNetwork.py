@@ -140,7 +140,6 @@ class_num = 2
 X = tf.placeholder(tf.int32, [None, maxlen])
 Y = tf.placeholder(tf.float32, [None, 2])
 sentense_length = tf.placeholder(tf.int32, [None])
-keep_prob = tf.constant(1.0)
 
 import numpy as np
 # weights = tf.Variable(tf.truncated_normal([embedding_size, class_num], stddev=1, dtype=tf.float32))
@@ -149,7 +148,6 @@ import numpy as np
 embeddings = tf.Variable(tf.random_uniform([vocalbulary_size, embedding_size], -1.0, 1.0))
 inputs = tf.nn.embedding_lookup(embeddings, X)
 def forwardNN(last_rnn_output):
-    # 2 hidden layers added
     lay_1_num = 50
     lay_2_num = 100
     weights_1 = tf.Variable(tf.truncated_normal([embedding_size, lay_1_num], stddev=np.sqrt(2.0/lay_1_num), dtype=tf.float32))
@@ -161,31 +159,26 @@ def forwardNN(last_rnn_output):
     out_weights = tf.Variable(tf.truncated_normal([lay_2_num, class_num], stddev=np.sqrt(2.0/class_num), dtype=tf.float32))
     out_bias = tf.Variable(tf.constant(0.0, shape=[class_num], dtype=tf.float32))
     out_result = tf.matmul(result_2, out_weights) + out_bias
- 
-    # l2 loss regularizer
-    
     l2_loss = tf.nn.l2_loss(weights_1) + tf.nn.l2_loss(out_weights) + tf.nn.l2_loss(weights_2)
     return out_result, l2_loss
 
 lstm_cells = tf.contrib.rnn.BasicLSTMCell(num_units=lstm_size)
 outputs, state = tf.nn.dynamic_rnn(cell=lstm_cells, inputs=inputs, dtype=tf.float32, sequence_length=sentense_length)
-# add drop out! no overfitting
 outputs = tf.nn.dropout(outputs, keep_prob=0.6)
 last_output_idx = tf.range(tf.shape(outputs)[0]) * tf.shape(outputs)[1] + sentense_length - 1
 last_rnn_output = tf.gather(tf.reshape(outputs, [-1, lstm_size]), last_output_idx)
 
 # one_batch_predict = tf.nn.softmax(tf.matmul(last_rnn_output, weights) + bias)
 one_batch_predict = forwardNN(last_rnn_output)[0]
-
-# important! first sigmoid, then softmax!
 classify = tf.nn.sigmoid(one_batch_predict)
 probability = tf.nn.softmax(classify)
 l2_loss = forwardNN(last_rnn_output)[1]
-
-# add regularizer
 cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=one_batch_predict, labels=Y)) + 0.001 * l2_loss
+global_step = tf.Variable(0, trainable=False)
+starter_learning_rate = 0.1
+learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step, 2000, 0.96, staircase=True)
+learning_step = (tf.train.GradientDescentOptimizer(learning_rate).minimize(cross_entropy_loss))
 
-train_method = tf.train.GradientDescentOptimizer(0.1).minimize(cross_entropy_loss)
 
 accurate_position = tf.equal(tf.argmax(Y, 1), tf.argmax(one_batch_predict, 1))
 accuracy = tf.reduce_mean(tf.cast(accurate_position, tf.float32))
@@ -200,10 +193,10 @@ with tf.Session() as sess:
     import random
     batch_size = 128
     train_batch_num = math.ceil(len(trainlist) / batch_size)
-    for i in range(1, 1001):
+    for i in range(1, 2001):
         for batchi in range(train_batch_num):
             batch_x, batch_y, batch_len = gettrainbatch(batchi, batch_size)
-            sess.run(train_method, feed_dict={X: batch_x, Y: batch_y, sentense_length: batch_len})
+            sess.run(learning_step, feed_dict={X: batch_x, Y: batch_y, sentense_length: batch_len})
         if i % 100 == 0 or i == 1:
             batch_x, batch_y, batch_len = gettrainbatch(random.randint(0, train_batch_num-1), batch_size)
             acc, loss = sess.run([accuracy, cross_entropy_loss], feed_dict={X: batch_x, Y: batch_y,
