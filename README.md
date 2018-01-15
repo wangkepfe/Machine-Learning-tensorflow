@@ -1,6 +1,8 @@
 # Machine-Learning-tensorflow
 Course work/course design in CMPS242, Autumn 2017, UCSC
 
+Cooperated with Yuan Yang, De Huo
+
 <h2>1. Ham or Spam</h2>
 
 - Text Classification problem
